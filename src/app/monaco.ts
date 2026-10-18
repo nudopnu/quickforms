@@ -1,6 +1,7 @@
 import { AfterViewInit, Component, computed, ElementRef, OnDestroy, signal, viewChild } from "@angular/core";
 import { createBrowserHost, registerMonacoLanguage, type BrowserHost } from "@typespec/playground";
 import * as monaco from "monaco-editor";
+import { stringify } from "yaml";
 import { Form } from "./form";
 
 const EMITTER = "@typespec/json-schema";
@@ -38,8 +39,8 @@ model File {
     imports: [Form],
     template: `
     <div class="absolute inset-0 flex">
-        <div #host class="relative h-full w-1/2"></div>
-        <div class="relative flex h-full w-1/2 flex-col">
+        <div #host class="relative h-full w-1/3"></div>
+        <div class="relative flex h-full w-1/3 flex-col">
             @if (errors().length) {
                 <pre class="m-0 max-h-1/3 overflow-auto bg-red-950 p-2 text-xs text-red-200">{{ errors().join("\n") }}</pre>
             }
@@ -52,15 +53,19 @@ model File {
             }
             <div class="flex-1 overflow-auto">
                 @if (parsedSchema(); as schema) {
-                    <mo-form [schema]="schema" />
+                    <mo-form [schema]="schema" (valueChange)="showData($event)" />
                 }
             </div>
         </div>
+        <div #data class="relative h-full w-1/3"></div>
     </div>
     `,
 })
 export class Monaco implements AfterViewInit, OnDestroy {
     host = viewChild.required<ElementRef<HTMLDivElement>>("host");
+    data = viewChild.required<ElementRef<HTMLDivElement>>("data");
+    /** Rechte Pane: aktuelle Formulardaten als YAML. */
+    private dataModel?: monaco.editor.ITextModel;
 
     /** Zuletzt erzeugte JSON Schemas aller Models mit @jsonSchema, nach Dateiname. */
     schemas = signal<Record<string, string>>({});
@@ -108,6 +113,15 @@ export class Monaco implements AfterViewInit, OnDestroy {
             "semanticHighlighting.enabled": true,
         });
 
+        this.dataModel = monaco.editor.createModel("", "yaml");
+        const dataEditor = monaco.editor.create(this.data().nativeElement, {
+            theme: "monang-dark",
+            model: this.dataModel,
+            readOnly: true,
+            automaticLayout: true,
+            minimap: { enabled: false },
+        });
+
         let timer: ReturnType<typeof setTimeout> | undefined;
         const update = async () => {
             const schemas = await this.compile(host, model.getValue());
@@ -122,9 +136,15 @@ export class Monaco implements AfterViewInit, OnDestroy {
             { dispose: () => clearTimeout(timer) },
             editor,
             model,
+            dataEditor,
+            this.dataModel,
         );
 
         await update();
+    }
+
+    showData(value: unknown) {
+        this.dataModel?.setValue(stringify(value ?? {}));
     }
 
     ngOnDestroy() {

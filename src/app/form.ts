@@ -1,4 +1,4 @@
-import { Component, computed, ElementRef, inject, input, signal, viewChild } from "@angular/core";
+import { Component, computed, effect, ElementRef, inject, input, output, signal, viewChild } from "@angular/core";
 import { FormGroup, ReactiveFormsModule } from "@angular/forms";
 import { FormlyFieldConfig, FormlyForm } from "@ngx-formly/core";
 import { FormlyJsonschema } from '@ngx-formly/core/json-schema';
@@ -78,7 +78,7 @@ function toFileField(field: FormlyFieldConfig, schema: any): FormlyFieldConfig {
     template: `
       <form #formEl [formGroup]="state().form" (ngSubmit)="onSubmit()" class="p-4 flex flex-col gap-4">
     <h1 class="text-2xl font-bold">{{ state().title }}</h1>
-    <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model"></formly-form>
+    <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model" (modelChange)="valueChange.emit($event)"></formly-form>
     <button type="submit" class="btn btn-primary btn-sm w-fit" [disabled]="exporting()">Submit</button>
   </form>
     `,
@@ -86,6 +86,8 @@ function toFileField(field: FormlyFieldConfig, schema: any): FormlyFieldConfig {
 export class Form {
     private store = inject(FileStore);
     schema = input.required<any>();
+    /** Aktuelle Formulardaten, bei jeder Eingabe und nach jedem Schema-Wechsel. */
+    valueChange = output<unknown>();
     /** Letztes Model, damit Eingaben über Schema-Änderungen erhalten bleiben. */
     private lastModel: any = {};
     /** Bei jedem neuen Schema eine frische FormGroup, sonst bleiben alte Controls hängen. */
@@ -107,6 +109,14 @@ export class Form {
         if (root.props) delete root.props.label;
         return { form: new FormGroup({}), fields: [root] as FormlyFieldConfig[], model, title };
     });
+
+    constructor() {
+        // Nach Schema-Wechsel einmal melden; setTimeout, damit Formly Defaults schon ins Model geschrieben hat.
+        effect(() => {
+            const { model } = this.state();
+            setTimeout(() => this.valueChange.emit(model));
+        });
+    }
 
     formEl = viewChild.required<ElementRef<HTMLFormElement>>('formEl');
     exporting = signal(false);
