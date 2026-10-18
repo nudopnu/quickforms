@@ -1,6 +1,6 @@
 import { Component, computed, effect, ElementRef, inject, input, output, signal, viewChild } from "@angular/core";
 import { FormGroup, ReactiveFormsModule } from "@angular/forms";
-import { FormlyFieldConfig, FormlyForm } from "@ngx-formly/core";
+import { FormlyConfig, FormlyFieldConfig, FormlyForm } from "@ngx-formly/core";
 import { FormlyJsonschema } from '@ngx-formly/core/json-schema';
 import { collectFileRefs, FileStore } from './file-store';
 
@@ -49,17 +49,17 @@ function prune(value: any, schema: any, root: any): any {
 }
 
 /**
- * Formly übernimmt beim Auflösen eines $ref nur title/description/default/widget vom Property-Schema.
- * Damit `@extension("accept", ...)` neben `$ref: File` ankommt, wandert es nach widget.formlyConfig.
+ * Formly übernimmt beim Auflösen eines $ref nur title/description/default/widget vom Property-Schema;
+ * Constraints daneben (z. B. `@maxLength(500) notes: text` oder `accept` an `File`) gingen verloren.
+ * `{ $ref, ...rest }` wird daher zu `{ allOf: [{ $ref }], ...rest }` – allOf führt Formly vollständig zusammen.
  */
-function withFileWidgets(schema: any): any {
-    if (Array.isArray(schema)) return schema.map(withFileWidgets);
+function refsToAllOf(schema: any): any {
+    if (Array.isArray(schema)) return schema.map(refsToAllOf);
     if (typeof schema !== "object" || schema === null) return schema;
     const result: Record<string, any> = {};
-    for (const [key, value] of Object.entries(schema)) result[key] = withFileWidgets(value);
-    if (typeof result["accept"] === "string") {
-        result["widget"] = { formlyConfig: { props: { accept: result["accept"] } } };
-    }
+    for (const [key, value] of Object.entries(schema)) result[key] = refsToAllOf(value);
+    const { $ref, ...rest } = result;
+    if (typeof $ref === "string" && Object.keys(rest).length) return { ...rest, allOf: [{ $ref }] };
     return result;
 }
 
@@ -68,23 +68,29 @@ function toFileField(field: FormlyFieldConfig, schema: any): FormlyFieldConfig {
     const multiple = schema.type === "array" && !!schema.items?.["x-file"];
     if (!schema["x-file"] && !multiple) return field;
     const { fieldGroup, fieldArray, defaultValue, ...rest } = field;
-    return { ...rest, type: "file", props: { ...rest.props, multiple } };
+    return { ...rest, type: "file", props: { ...rest.props, multiple, accept: schema.accept } };
 }
 
 @Component({
     selector: "mo-form",
     imports: [FormlyForm, ReactiveFormsModule],
     providers: [FileStore],
+    host: { class: "block h-full" },
     template: `
-      <form #formEl [formGroup]="state().form" (ngSubmit)="onSubmit()" class="p-4 flex flex-col gap-4">
-    <h1 class="text-2xl font-bold">{{ state().title }}</h1>
-    <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model" (modelChange)="valueChange.emit($event)"></formly-form>
-    <button type="submit" class="btn btn-primary btn-sm w-fit" [disabled]="exporting()">Submit</button>
-  </form>
+      <form #formEl [formGroup]="state().form" (ngSubmit)="onSubmit()" class="flex h-full min-h-0 flex-col gap-4 p-4">
+        <h1 class="text-2xl font-bold">{{ state().title }}</h1>
+        <div class="divider m-0"></div>
+        <!-- Nur ab hier scrollen; data-print-expand: der PDF-Export klappt den Bereich für den Screenshot auf -->
+        <div data-print-expand class="-mx-4 min-h-0 flex-1 overflow-y-auto px-4">
+            <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model" (modelChange)="valueChange.emit($event)"></formly-form>
+            <button type="submit" class="btn btn-primary btn-sm w-fit" [disabled]="exporting()">Submit</button>
+        </div>
+    </form>
     `,
 })
 export class Form {
     private store = inject(FileStore);
+    private formlyConfig = inject(FormlyConfig);
     schema = input.required<any>();
     /** Aktuelle Formulardaten, bei jeder Eingabe und nach jedem Schema-Wechsel. */
     valueChange = output<unknown>();
@@ -95,12 +101,15 @@ export class Form {
         const schema = this.schema();
         const model = prune(this.lastModel, schema, schema) ?? {};
         this.lastModel = model;
-        const root = new FormlyJsonschema().toFieldConfig(withFileWidgets(schema), {
+        const root = new FormlyJsonschema().toFieldConfig(refsToAllOf(schema), {
             map: (field, fieldSchema) => {
                 // Ohne @summary (-> "title") den Property-Namen als Label verwenden.
                 if (!field.props?.label && typeof field.key === "string") {
                     field.props = { ...field.props, label: titleCase(field.key) };
                 }
+                // x-widget (z. B. "textarea" am Scalar text) wählt einen registrierten Formly-Typ.
+                const widget = fieldSchema["x-widget"];
+                if (typeof widget === "string" && this.formlyConfig.types[widget]) field.type = widget;
                 return toFileField(field, fieldSchema);
             },
         });

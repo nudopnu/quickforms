@@ -42,6 +42,17 @@ export class DaisyFormFieldWrapper extends FieldWrapper { }
 })
 export class DaisyInputType extends FieldType<FieldTypeConfig> { }
 
+// Mehrzeiliger Text (TypeSpec-Scalar text, x-widget: textarea)
+@Component({
+    selector: 'daisy-textarea',
+    standalone: true,
+    imports: [ReactiveFormsModule, FormlyModule],
+    template: `
+    <textarea class="textarea w-full" [class.textarea-error]="showError" [rows]="props.rows ?? 4"
+              [formControl]="formControl" [formlyAttributes]="field"></textarea>`,
+})
+export class DaisyTextareaType extends FieldType<FieldTypeConfig> { }
+
 // Checkbox
 @Component({
     selector: 'daisy-checkbox',
@@ -164,6 +175,7 @@ export const daisyFormlyConfig: ConfigOption = {
     types: [
         // Basis-Typen
         { name: 'input', component: DaisyInputType, wrappers: ['form-field'] },
+        { name: 'textarea', component: DaisyTextareaType, wrappers: ['form-field'] },
         { name: 'checkbox', component: DaisyCheckboxType },
         { name: 'select', component: DaisySelectType, wrappers: ['form-field'] },
         // JSON-Schema-Typen

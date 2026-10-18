@@ -1,4 +1,5 @@
 import { AfterViewInit, Component, computed, ElementRef, OnDestroy, signal, viewChild } from "@angular/core";
+import type { Diagnostic } from "@typespec/compiler";
 import { createBrowserHost, registerMonacoLanguage, type BrowserHost } from "@typespec/playground";
 import * as monaco from "monaco-editor";
 import { stringify } from "yaml";
@@ -7,18 +8,24 @@ import { Form } from "./form";
 const EMITTER = "@typespec/json-schema";
 const OUTPUT_DIR = "/test/tsp-output";
 const INITIAL_CODE = `import "@typespec/json-schema";
-import "./file.tsp";
+import "./forms.tsp";
 using JsonSchema;
 
 @jsonSchema
 model Foo {
     name: string;
+    /** mehrzeilig */
+    notes?: text;
     contract: File;
 }
 `;
-/** Liegt neben main.tsp; das Formular rendert Felder vom Typ File (x-file) als Upload. */
-const FILE_TSP = `import "@typespec/json-schema";
+/** Liegt neben main.tsp: Typen, die das Formular besonders darstellt (File -> Upload, text -> Textarea). */
+const FORMS_TSP = `import "@typespec/json-schema";
 using JsonSchema;
+
+/** Mehrzeiliger Text, wird als Textarea dargestellt. */
+@extension("x-widget", "textarea")
+scalar text extends string;
 
 /** Verweis auf eine Datei, die als Anlage im PDF liegt. */
 @extension("x-file", true)
@@ -34,6 +41,18 @@ model File {
 }
 `;
 
+/** Ein Compiler-Fehler bzw. eine Warnung, aufbereitet für die Anzeige. */
+interface Problem {
+    severity: "error" | "warning";
+    message: string;
+    code?: string;
+    /** Relativ zum Projekt, z. B. "main.tsp" */
+    file?: string;
+    /** 1-basiert */
+    line?: number;
+    column?: number;
+}
+
 @Component({
     selector: "mo-monaco",
     imports: [Form],
@@ -41,8 +60,30 @@ model File {
     <div class="absolute inset-0 flex">
         <div #host class="relative h-full w-1/3"></div>
         <div class="relative flex h-full w-1/3 flex-col">
-            @if (errors().length) {
-                <pre class="m-0 max-h-1/3 overflow-auto bg-red-950 p-2 text-xs text-red-200">{{ errors().join("\n") }}</pre>
+            @if (problems().length) {
+                <div class="max-h-1/3 shrink-0 overflow-auto border-b border-base-300 bg-base-200 text-xs">
+                    @if (errorCount()) {
+                        <div class="px-3 py-1.5 font-semibold text-error">
+                            {{ errorCount() }} Fehler
+                            @if (parsedSchema()) { <span class="font-normal opacity-70">– Formular zeigt den letzten gültigen Stand</span> }
+                        </div>
+                    }
+                    <ul>
+                        @for (p of problems(); track $index) {
+                            <li>
+                                <button type="button" class="flex w-full items-baseline gap-2 px-3 py-1 text-left enabled:cursor-pointer enabled:hover:bg-base-300"
+                                        [disabled]="p.file !== 'main.tsp' || !p.line" (click)="reveal(p)">
+                                    <span class="shrink-0 font-semibold" [class.text-error]="p.severity === 'error'" [class.text-warning]="p.severity === 'warning'">
+                                        {{ p.severity === "error" ? "Fehler" : "Warnung" }}
+                                    </span>
+                                    @if (p.line) { <span class="shrink-0 font-mono opacity-60">{{ p.file }}:{{ p.line }}:{{ p.column }}</span> }
+                                    <span class="grow">{{ p.message }}</span>
+                                    @if (p.code) { <span class="shrink-0 font-mono opacity-50">{{ p.code }}</span> }
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </div>
             }
             @if (schemaNames().length > 1) {
                 <select class="select select-sm m-2 w-fit" [value]="current()" (change)="selected.set($any($event.target).value)">
@@ -51,7 +92,7 @@ model File {
                     }
                 </select>
             }
-            <div class="flex-1 overflow-auto">
+            <div class="min-h-0 flex-1">
                 @if (parsedSchema(); as schema) {
                     <mo-form [schema]="schema" (valueChange)="showData($event)" />
                 }
@@ -80,14 +121,17 @@ export class Monaco implements AfterViewInit, OnDestroy {
         const schema = this.schemas()[this.current()];
         return schema ? JSON.parse(schema) : undefined;
     });
-    errors = signal<string[]>([]);
+    problems = signal<Problem[]>([]);
+    errorCount = computed(() => this.problems().filter((p) => p.severity === "error").length);
+
+    private editor?: monaco.editor.IStandaloneCodeEditor;
 
     private disposables: monaco.IDisposable[] = [];
     private compileRun = 0;
 
     async ngAfterViewInit() {
         const host = await createBrowserHost(["@typespec/compiler", EMITTER]);
-        await host.writeFile("file.tsp", FILE_TSP);
+        await host.writeFile("forms.tsp", FORMS_TSP);
         await registerMonacoLanguage(host);
         // typespec-dark färbt Decorators rosarot, was wie ein Fehler aussieht – daher VS-Code-Farben.
         monaco.editor.defineTheme("monang-dark", {
@@ -106,12 +150,12 @@ export class Monaco implements AfterViewInit, OnDestroy {
             monaco.Uri.parse("inmemory://test/main.tsp"),
         );
 
-        const editor = monaco.editor.create(this.host().nativeElement, {
+        const editor = (this.editor = monaco.editor.create(this.host().nativeElement, {
             theme: "monang-dark",
             model,
             automaticLayout: true,
             "semanticHighlighting.enabled": true,
-        });
+        }));
 
         this.dataModel = monaco.editor.createModel("", "yaml");
         const dataEditor = monaco.editor.create(this.data().nativeElement, {
@@ -143,6 +187,15 @@ export class Monaco implements AfterViewInit, OnDestroy {
         await update();
     }
 
+    /** Springt im Editor zur Stelle des Problems. */
+    reveal(problem: Problem) {
+        if (!this.editor || !problem.line) return;
+        const position = { lineNumber: problem.line, column: problem.column ?? 1 };
+        this.editor.setPosition(position);
+        this.editor.revealPositionInCenter(position);
+        this.editor.focus();
+    }
+
     showData(value: unknown) {
         this.dataModel?.setValue(stringify(value ?? {}));
     }
@@ -170,26 +223,46 @@ export class Monaco implements AfterViewInit, OnDestroy {
             });
             if (run !== this.compileRun) return undefined;
 
-            this.errors.set(
-                program.diagnostics
-                    .filter((d) => d.severity === "error")
-                    .map((d) => host.compiler.formatDiagnostic(d)),
-            );
+            this.problems.set(program.diagnostics.map((d) => toProblem(host, d)));
             if (program.hasError()) return undefined;
 
             // Pro @jsonSchema-Model schreibt der Emitter eine Datei <Name>.json; referenzierte
             // Models ohne @jsonSchema landen unter $defs im jeweiligen Dokument.
             const files = await host.readDir(OUTPUT_DIR).catch(() => [] as string[]);
             if (!files.length) {
-                this.errors.set(["Kein Model mit @jsonSchema gefunden."]);
+                this.problems.set([{ severity: "error", message: "Kein Model mit @jsonSchema gefunden – mindestens ein Model braucht den Decorator @jsonSchema." }]);
                 return undefined;
             }
             const schemas: Record<string, string> = {};
             for (const file of files) schemas[file] = (await host.readFile(`${OUTPUT_DIR}/${file}`)).text;
             return schemas;
         } catch (error) {
-            if (run === this.compileRun) this.errors.set([String(error)]);
+            console.error("Interner Compiler-Fehler", error);
+            if (run === this.compileRun) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.problems.set([{ severity: "error", message: `Interner Fehler: ${message} (Details in der Konsole)` }]);
+            }
             return undefined;
         }
     }
+}
+
+/**
+ * Bereitet ein Compiler-Diagnostic auf. Nicht compiler.formatDiagnostic verwenden: im Browser-Build ist das nur
+ * JSON.stringify(diagnostic) und scheitert am zirkulären AST in diagnostic.target ("cyclic object value").
+ */
+function toProblem(host: BrowserHost, d: Diagnostic): Problem {
+    const problem: Problem = { severity: d.severity, message: d.message, code: String(d.code) };
+    try {
+        const location = typeof d.target === "symbol" ? undefined : host.compiler.getSourceLocation(d.target);
+        if (location && !location.isSynthetic) {
+            const { line, character } = location.file.getLineAndCharacterOfPosition(location.pos);
+            problem.file = location.file.path.replace(/^\/test\//, "");
+            problem.line = line + 1;
+            problem.column = character + 1;
+        }
+    } catch {
+        // Ohne Position anzeigen
+    }
+    return problem;
 }

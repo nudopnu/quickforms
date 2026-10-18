@@ -71,8 +71,16 @@ async function renderForPrint(element: HTMLElement): Promise<HTMLCanvasElement> 
   // Kurzzeitig helles Theme und feste Breite, damit das PDF unabhängig von Dark Mode und Viewport ist
   const prevTheme = element.getAttribute('data-theme');
   const prevWidth = element.style.width;
+  const prevHeight = element.style.height;
   element.setAttribute('data-theme', PRINT_THEME);
   element.style.width = `${RENDER_WIDTH_PX}px`;
+  // Scroll-Bereiche (data-print-expand) aufklappen, sonst landet nur der sichtbare Ausschnitt im PDF
+  element.style.height = 'auto';
+  const expanded = [...element.querySelectorAll<HTMLElement>('[data-print-expand]')].map((el) => {
+    const prev = el.style.overflow;
+    el.style.overflow = 'visible';
+    return () => (el.style.overflow = prev);
+  });
   try {
     return await domToCanvas(element, {
       scale: 2,
@@ -85,6 +93,8 @@ async function renderForPrint(element: HTMLElement): Promise<HTMLCanvasElement> 
     if (prevTheme === null) element.removeAttribute('data-theme');
     else element.setAttribute('data-theme', prevTheme);
     element.style.width = prevWidth;
+    element.style.height = prevHeight;
+    expanded.forEach((restore) => restore());
   }
 }
 
