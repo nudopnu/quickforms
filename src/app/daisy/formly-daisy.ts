@@ -1,9 +1,11 @@
 import { AsyncPipe } from '@angular/common';
-import { Component } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { ConfigOption, FieldArrayType, FieldType, FieldTypeConfig, FieldWrapper, FormlyFieldConfig, FormlyModule } from '@ngx-formly/core';
 import { FormlySelectModule } from '@ngx-formly/core/select';
 import { TablerIconComponent } from '@tabler/icons-angular';
+import { FileRef, FileStore, isFileRef } from '../file-store';
+import { FileUpload, UploadFile } from './file-upload';
 
 // Wrapper: Label + Beschreibung + Fehler
 // Wrapper für Inputs und Selects
@@ -112,6 +114,47 @@ export class DaisyObjectType extends FieldType {}
 })
 export class DaisyArrayType extends FieldArrayType {}
 
+// Datei-Upload für TypeSpec-Model File (x-file). Wert im Model: FileRef bzw. FileRef[] bei multiple,
+// die Dateien selbst liegen im FileStore.
+@Component({
+  selector: 'daisy-file',
+  standalone: true,
+  imports: [FileUpload],
+  template: `
+    <mo-file [files]="uploads()" (filesChange)="onChange($event)" [accept]="props['accept'] ?? ''"
+             [multiple]="!!props['multiple']" [hint]="props['accept'] ? 'Erlaubt: ' + props['accept'] : 'Beliebige Dateien'" />`,
+})
+export class DaisyFileType extends FieldType<FieldTypeConfig> implements OnInit {
+  private store = inject(FileStore);
+  uploads = signal<UploadFile[]>([]);
+
+  ngOnInit() {
+    const value = this.formControl.value;
+    const refs: unknown[] = Array.isArray(value) ? value : value ? [value] : [];
+    this.uploads.set(
+      refs.filter(isFileRef).flatMap((ref) => {
+        const file = this.store.get(ref.attachment);
+        return file ? [{ id: ref.attachment, file }] : [];
+      }),
+    );
+  }
+
+  onChange(uploads: UploadFile[]) {
+    // Neue Dateien bekommen als id ihren eindeutigen Anlagennamen.
+    const known = new Set(this.uploads().map((u) => u.id));
+    const next = uploads.map((u) => (known.has(u.id) ? u : { id: `${u.id.slice(0, 8)}-${u.file.name}`, file: u.file }));
+    const keep = new Set(next.map((u) => u.id));
+    this.uploads().forEach((u) => keep.has(u.id) || this.store.delete(u.id));
+    next.forEach((u) => this.store.set(u.id, u.file));
+    this.uploads.set(next);
+
+    const refs: FileRef[] = next.map((u) => ({ name: u.file.name, mediaType: u.file.type, size: u.file.size, attachment: u.id }));
+    this.formControl.setValue(this.props['multiple'] ? refs : refs[0]);
+    this.formControl.markAsTouched();
+    this.formControl.markAsDirty();
+  }
+}
+
 // null: rendert nichts
 @Component({ selector: 'daisy-null', standalone: true, template: `` })
 export class DaisyNullType extends FieldType { }
@@ -133,6 +176,7 @@ export const daisyFormlyConfig: ConfigOption = {
         { name: 'multischema', component: DaisyObjectType },
         { name: 'array', component: DaisyArrayType },
         { name: 'null', component: DaisyNullType },
+        { name: 'file', component: DaisyFileType, wrappers: ['form-field'] },
     ],
     validationMessages: [
         { name: 'required', message: 'Pflichtfeld' },

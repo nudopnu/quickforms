@@ -13,6 +13,8 @@ export interface PdfExportOptions {
   title?: string;
   schemaId?: string;
   data: unknown;
+  /** Hochgeladene Dateien, die zusätzlich als Anlage ins PDF kommen. */
+  attachments?: { name: string; file: File }[];
 }
 
 /** Rendert das Element als PDF, hängt die Daten als formdata.json an und startet den Download. */
@@ -51,6 +53,16 @@ export async function exportElementAsPdf(element: HTMLElement, opts: PdfExportOp
     modificationDate: new Date(),
   });
 
+  for (const { name, file } of opts.attachments ?? []) {
+    await pdf.attach(new Uint8Array(await file.arrayBuffer()), name, {
+      mimeType: file.type || 'application/octet-stream',
+      description: file.name,
+      afRelationship: AFRelationship.Supplement,
+      creationDate: new Date(),
+      modificationDate: new Date(file.lastModified),
+    });
+  }
+
   download(await pdf.save(), opts.fileName);
 }
 
@@ -65,8 +77,9 @@ async function renderForPrint(element: HTMLElement): Promise<HTMLCanvasElement> 
     return await domToCanvas(element, {
       scale: 2,
       backgroundColor: '#ffffff',
-      // Buttons (Submit, Hinzufügen, Entfernen) gehören nicht ins PDF
-      filter: (node) => !(node instanceof HTMLButtonElement),
+      // Buttons (Submit, Hinzufügen, Entfernen) und Elemente mit data-print-hide (z. B. Drop-Zone) gehören nicht ins PDF
+      filter: (node) =>
+        !(node instanceof HTMLButtonElement) && !(node instanceof HTMLElement && node.hasAttribute('data-print-hide')),
     });
   } finally {
     if (prevTheme === null) element.removeAttribute('data-theme');

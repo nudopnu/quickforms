@@ -6,11 +6,30 @@ import { Form } from "./form";
 const EMITTER = "@typespec/json-schema";
 const OUTPUT_DIR = "/test/tsp-output";
 const INITIAL_CODE = `import "@typespec/json-schema";
+import "./file.tsp";
 using JsonSchema;
 
 @jsonSchema
 model Foo {
     name: string;
+    contract: File;
+}
+`;
+/** Liegt neben main.tsp; das Formular rendert Felder vom Typ File (x-file) als Upload. */
+const FILE_TSP = `import "@typespec/json-schema";
+using JsonSchema;
+
+/** Verweis auf eine Datei, die als Anlage im PDF liegt. */
+@extension("x-file", true)
+model File {
+    /** Original-Dateiname */
+    name: string;
+    /** z. B. "application/pdf" */
+    mediaType: string;
+    /** Größe in Bytes */
+    size: safeint;
+    /** Name der Anlage im PDF */
+    attachment: string;
 }
 `;
 
@@ -63,6 +82,7 @@ export class Monaco implements AfterViewInit, OnDestroy {
 
     async ngAfterViewInit() {
         const host = await createBrowserHost(["@typespec/compiler", EMITTER]);
+        await host.writeFile("file.tsp", FILE_TSP);
         await registerMonacoLanguage(host);
         // typespec-dark färbt Decorators rosarot, was wie ein Fehler aussieht – daher VS-Code-Farben.
         monaco.editor.defineTheme("monang-dark", {
