@@ -1,12 +1,10 @@
 import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Monaco } from './monaco';
 
 @Component({
-  imports: [RouterOutlet],
+  imports: [Monaco],
   selector: 'app-root',
   styleUrl: './app.css',
-  templateUrl: './app.html',
+  template: `<mo-monaco></mo-monaco>`,
 })
-export class App {
-  protected readonly title = signal('monang');
-}
+export class App { }

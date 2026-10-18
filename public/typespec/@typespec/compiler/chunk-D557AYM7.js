@@ -1,0 +1,16 @@
+import {
+  __esm
+} from "./chunk-VOEMSLEO.js";
+
+// <define:process.env>
+var define_process_env_default;
+var init_define_process_env = __esm({
+  "<define:process.env>"() {
+    define_process_env_default = {};
+  }
+});
+
+export {
+  init_define_process_env,
+  define_process_env_default
+};
