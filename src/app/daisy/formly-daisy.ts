@@ -1,8 +1,8 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
-import { ConfigOption, FieldArrayType, FieldType, FieldTypeConfig, FieldWrapper, FormlyFieldConfig, FormlyModule } from '@ngx-formly/core';
-import { FormlySelectModule } from '@ngx-formly/core/select';
+import { ConfigOption, FieldArrayType, FieldType, FieldTypeConfig, FieldWrapper, FormlyAttributes, FormlyField, FormlyFieldConfig, FormlyValidationMessage } from '@ngx-formly/core';
+import { FormlySelectOptionsPipe } from '@ngx-formly/core/select';
 import { TablerIconComponent } from '@tabler/icons-angular';
 import { FileRef, FileStore, isFileRef } from '../file-store';
 import { FileUpload, UploadFile } from './file-upload';
@@ -12,7 +12,7 @@ import { FileUpload, UploadFile } from './file-upload';
 @Component({
     selector: 'daisy-form-field',
     standalone: true,
-    imports: [FormlyModule],
+    imports: [FormlyValidationMessage],
     template: `
     <fieldset class="fieldset">
       @if (props.label) { <legend class="fieldset-legend">{{ props.label }}</legend> }
@@ -30,7 +30,7 @@ export class DaisyFormFieldWrapper extends FieldWrapper { }
 @Component({
     selector: 'daisy-input',
     standalone: true,
-    imports: [ReactiveFormsModule, FormlyModule],
+    imports: [ReactiveFormsModule, FormlyAttributes],
     template: `
     @if (props.type === 'number') {
       <input type="number" class="input w-full" [class.input-error]="showError"
@@ -46,7 +46,7 @@ export class DaisyInputType extends FieldType<FieldTypeConfig> { }
 @Component({
     selector: 'daisy-textarea',
     standalone: true,
-    imports: [ReactiveFormsModule, FormlyModule],
+    imports: [ReactiveFormsModule, FormlyAttributes],
     template: `
     <textarea class="textarea w-full" [class.textarea-error]="showError" [rows]="props.rows ?? 4"
               [formControl]="formControl" [formlyAttributes]="field"></textarea>`,
@@ -57,7 +57,7 @@ export class DaisyTextareaType extends FieldType<FieldTypeConfig> { }
 @Component({
     selector: 'daisy-checkbox',
     standalone: true,
-    imports: [ReactiveFormsModule, FormlyModule],
+    imports: [ReactiveFormsModule, FormlyAttributes],
     template: `
     <label class="label cursor-pointer gap-3">
       <input type="checkbox" class="checkbox checkbox-primary"
@@ -71,7 +71,7 @@ export class DaisyCheckboxType extends FieldType<FieldTypeConfig> { }
 @Component({
     selector: 'daisy-select',
     standalone: true,
-    imports: [ReactiveFormsModule, FormlyModule, FormlySelectModule, AsyncPipe],
+    imports: [ReactiveFormsModule, FormlyAttributes, FormlySelectOptionsPipe, AsyncPipe],
     template: `
     <select class="select w-full" [formControl]="formControl" [formlyAttributes]="field">
       <option [ngValue]="undefined" disabled>Bitte wählen</option>
@@ -86,7 +86,7 @@ export class DaisySelectType extends FieldType<FieldTypeConfig> { }
 @Component({
   selector: 'daisy-object',
   standalone: true,
-  imports: [FormlyModule],
+  imports: [FormlyField, FormlyValidationMessage],
   template: `
     <fieldset class="fieldset">
       @if (props.label) { <legend class="fieldset-legend">{{ props.label }}</legend> }
@@ -104,11 +104,11 @@ export class DaisyObjectType extends FieldType {}
 @Component({
   selector: 'daisy-array',
   standalone: true,
-  imports: [FormlyModule, TablerIconComponent],
+  imports: [FormlyField, TablerIconComponent],
   template: `
     <fieldset class="fieldset">
       @if (props.label) { <legend class="fieldset-legend">{{ props.label }}</legend> }
-      @for (f of field.fieldGroup; track $index; let i = $index) {
+      @for (f of field.fieldGroup; track f; let i = $index) {
         <div class="flex items-center gap-2">
           <formly-field class="flex-1" [field]="f" />
           <button type="button" class="btn btn-ghost btn-secondary btn-square" (click)="remove(i)" aria-label="Entfernen">
@@ -123,23 +123,7 @@ export class DaisyObjectType extends FieldType {}
       @if (props.description) { <p class="label">{{ props.description }}</p> }
     </fieldset>`,
 })
-export class DaisyArrayType extends FieldArrayType {
-  // Formly-Eigenheit: Felder des gerade entfernten Eintrags (z. B. versteckte Konstanten einer Union-Variante wie
-  // target: "pitch") schreiben ihren Wert beim Entfernen noch einmal über den alten Index ins Model. Danach stand
-  // z. B. nach "alle löschen" noch [{ target: "pitch" }] im Model und "Hinzufügen" erzeugte zwei Einträge.
-  // Alles hinter den tatsächlich vorhandenen Einträgen ist daher Rest und wird abgeschnitten – erst nach dem
-  // Rendern, weil der Wert erst beim Abräumen der Felder geschrieben wird.
-  override remove(i: number, opts?: { markAsDirty: boolean }) {
-    super.remove(i, opts);
-    setTimeout(() => {
-      const length = this.field.fieldGroup?.length ?? 0;
-      if (!Array.isArray(this.model) || this.model.length <= length) return;
-      this.model.splice(length);
-      // Damit formly-form modelChange (YAML-Pane) erneut meldet
-      this.options.fieldChanges?.next({ field: this.field, type: 'valueChanges', value: this.model });
-    });
-  }
-}
+export class DaisyArrayType extends FieldArrayType {}
 
 // Datei-Upload für TypeSpec-Model File (x-file). Wert im Model: FileRef bzw. FileRef[] bei multiple,
 // die Dateien selbst liegen im FileStore.

@@ -65,6 +65,22 @@ function refsToAllOf(schema: any): any {
 }
 
 /**
+ * TypeSpec gibt `A | B` als `anyOf` aus ("eine oder mehrere Varianten"). Formly macht daraus eine Mehrfachauswahl, deren
+ * Wert ein Array ist – das einfache Select zeigt dann nichts an, und nach dem Hinzufügen eines Array-Eintrags waren
+ * mehrere Varianten zugleich aktiv und überschrieben sich gegenseitig ihre Konstanten.
+ * Gemeint ist bei einer Union genau eine Variante, daher wird jedes `anyOf` zu `oneOf`.
+ */
+function anyOfToOneOf(schema: any): any {
+    if (Array.isArray(schema)) return schema.map(anyOfToOneOf);
+    if (typeof schema !== "object" || schema === null) return schema;
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(schema)) result[key] = anyOfToOneOf(value);
+    if (!Array.isArray(result["anyOf"]) || result["oneOf"]) return result;
+    const { anyOf, ...rest } = result;
+    return { ...rest, oneOf: anyOf };
+}
+
+/**
  * Bei Unions (anyOf/oneOf) zeigt Formly eine Auswahl mit dem `title` jeder Variante – liest ihn aber von der
  * unaufgelösten Variante (`{ $ref }`), nicht aus $defs. Daher bekommt jede $ref-Variante ohne eigenen Titel den
  * Titel ihrer Definition (`@summary`) bzw. den Model-Namen ("Control").
@@ -156,7 +172,7 @@ export class Form {
         const schema = this.schema();
         const model = prune(this.lastModel, schema, schema) ?? {};
         this.lastModel = model;
-        const root = new FormlyJsonschema().toFieldConfig(refsToAllOf(titleUnionVariants(schema)), {
+        const root = new FormlyJsonschema().toFieldConfig(refsToAllOf(titleUnionVariants(anyOfToOneOf(schema))), {
             map: (field, fieldSchema) => {
                 // Ohne @summary (-> "title") den Property-Namen als Label verwenden.
                 if (!field.props?.label && typeof field.key === "string") {
