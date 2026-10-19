@@ -128,7 +128,7 @@ export type View = "single" | "double" | "triple";
     providers: [FileStore],
     host: { class: "block h-full" },
     template: `
-      <form #formEl [formGroup]="state().form" (ngSubmit)="onSubmit()" class="flex h-full min-h-0 flex-col gap-4 p-4">
+      <form #formEl [formGroup]="state().form" (ngSubmit)="onSubmit()" class="flex h-full min-h-0 flex-col p-4">
         <div class="mx-auto max-w-4xl w-full flex justify-between">
             <h1 class="text-2xl font-bold">{{ state().title }}</h1>
             <div class="tabs tabs-sm tabs-box">
@@ -141,7 +141,7 @@ export type View = "single" | "double" | "triple";
                 }
             </div>
         </div>
-        <div class="divider m-0"></div>
+        <div class="divider m-0 pb-0"></div>
         <!-- Nur ab hier scrollen; data-print-expand: der PDF-Export klappt den Bereich für den Screenshot auf -->
         <div data-print-expand class="mx-auto min-h-0 flex-1 overflow-y-auto px-4 max-w-4xl w-full">
             <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model" (modelChange)="onModelChange()"></formly-form>

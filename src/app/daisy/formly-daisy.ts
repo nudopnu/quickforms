@@ -88,17 +88,42 @@ export class DaisySelectType extends FieldType<FieldTypeConfig> { }
   standalone: true,
   imports: [FormlyField, FormlyValidationMessage],
   template: `
-    <fieldset class="fieldset">
-      @if (props.label) { <legend class="fieldset-legend">{{ props.label }}</legend> }
+    @if (!variant || hasVisibleFields) {
+      <fieldset class="fieldset" [class]="bordered ? 'border border-secondary/10 px-4 pt-4 pb-2 rounded-box' : ''">
+        @if (props.label && !variant) { <legend class="fieldset-legend">{{ props.label }}</legend> }
+        @for (f of field.fieldGroup; track $index) { <formly-field [field]="f" /> }
+        @if (showError && formControl.errors) {
+          <p class="label text-error"><formly-validation-message [field]="field" /></p>
+        } @else if (props.description) {
+          <p class="label">{{ props.description }}</p>
+        }
+      </fieldset>
+    } @else {
       @for (f of field.fieldGroup; track $index) { <formly-field [field]="f" /> }
-      @if (showError && formControl.errors) {
-        <p class="label text-error"><formly-validation-message [field]="field" /></p>
-      } @else if (props.description) {
-        <p class="label">{{ props.description }}</p>
-      }
-    </fieldset>`,
+    }`,
 })
-export class DaisyObjectType extends FieldType {}
+export class DaisyObjectType extends FieldType {
+  /** Variante einer Union: Name steht schon in der Typ-Auswahl, Rahmen sitzt am multischema. */
+  get variant() {
+    return this.field.parent?.parent?.type === 'multischema';
+  }
+
+  /** Konstanten (z. B. Diskriminator "type") werden als null-Typ unsichtbar gerendert. */
+  get hasVisibleFields() {
+    return !!this.field.fieldGroup?.some((f) => f.type !== 'null');
+  }
+
+  /**
+   * Rahmen für alles außer dem Root-Model. Bei Unions sitzt er am multischema, damit er die Typ-Auswahl
+   * einschließt, nicht an der Variante. Formly-Gruppen ohne eigenen Typ zählen nicht als Ebene.
+   */
+  get bordered() {
+    if (this.variant) return false;
+    let p = this.field.parent;
+    while (p && (!p.type || p.type === 'formly-group')) p = p.parent;
+    return !!p;
+  }
+}
 
 // Arrays
 @Component({
@@ -106,7 +131,7 @@ export class DaisyObjectType extends FieldType {}
   standalone: true,
   imports: [FormlyField, TablerIconComponent],
   template: `
-    <fieldset class="fieldset">
+    <fieldset class="fieldset gap-4">
       @if (props.label) { <legend class="fieldset-legend">{{ props.label }}</legend> }
       @for (f of field.fieldGroup; track f; let i = $index) {
         <div class="flex items-center gap-2">
