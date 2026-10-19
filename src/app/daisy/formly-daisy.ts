@@ -123,7 +123,23 @@ export class DaisyObjectType extends FieldType {}
       @if (props.description) { <p class="label">{{ props.description }}</p> }
     </fieldset>`,
 })
-export class DaisyArrayType extends FieldArrayType {}
+export class DaisyArrayType extends FieldArrayType {
+  // Formly-Eigenheit: Felder des gerade entfernten Eintrags (z. B. versteckte Konstanten einer Union-Variante wie
+  // target: "pitch") schreiben ihren Wert beim Entfernen noch einmal über den alten Index ins Model. Danach stand
+  // z. B. nach "alle löschen" noch [{ target: "pitch" }] im Model und "Hinzufügen" erzeugte zwei Einträge.
+  // Alles hinter den tatsächlich vorhandenen Einträgen ist daher Rest und wird abgeschnitten – erst nach dem
+  // Rendern, weil der Wert erst beim Abräumen der Felder geschrieben wird.
+  override remove(i: number, opts?: { markAsDirty: boolean }) {
+    super.remove(i, opts);
+    setTimeout(() => {
+      const length = this.field.fieldGroup?.length ?? 0;
+      if (!Array.isArray(this.model) || this.model.length <= length) return;
+      this.model.splice(length);
+      // Damit formly-form modelChange (YAML-Pane) erneut meldet
+      this.options.fieldChanges?.next({ field: this.field, type: 'valueChanges', value: this.model });
+    });
+  }
+}
 
 // Datei-Upload für TypeSpec-Model File (x-file). Wert im Model: FileRef bzw. FileRef[] bei multiple,
 // die Dateien selbst liegen im FileStore.

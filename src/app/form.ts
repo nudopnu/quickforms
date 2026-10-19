@@ -63,6 +63,37 @@ function refsToAllOf(schema: any): any {
     return result;
 }
 
+/**
+ * Bei Unions (anyOf/oneOf) zeigt Formly eine Auswahl mit dem `title` jeder Variante – liest ihn aber von der
+ * unaufgelösten Variante (`{ $ref }`), nicht aus $defs. Daher bekommt jede $ref-Variante ohne eigenen Titel den
+ * Titel ihrer Definition (`@summary`) bzw. den Model-Namen ("Control").
+ * Nur an der Variante, nicht an $defs selbst – sonst würde der Model-Name auch das Label normaler Properties überschreiben.
+ */
+function titleUnionVariants(schema: any, root: any = schema): any {
+    if (Array.isArray(schema)) return schema.map((s) => titleUnionVariants(s, root));
+    if (typeof schema !== "object" || schema === null) return schema;
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(schema)) result[key] = titleUnionVariants(value, root);
+    for (const mode of ["anyOf", "oneOf"]) {
+        if (!Array.isArray(result[mode])) continue;
+        result[mode] = result[mode].map((variant: any) => {
+            const name = typeof variant?.$ref === "string" && variant.$ref.startsWith("#/$defs/") ? variant.$ref.slice(8) : undefined;
+            if (!name || variant.title) return variant;
+            return { ...variant, title: root.$defs?.[name]?.title ?? titleCase(name) };
+        });
+    }
+    return result;
+}
+
+/**
+ * Felder mit genau einem erlaubten Wert (z. B. `type: "control"` als Unterscheidungsmerkmal einer Union) sind keine
+ * Eingabe: unsichtbar rendern, Wert aber setzen, damit er in den Daten steht.
+ */
+function toConstField(field: FormlyFieldConfig, schema: any): FormlyFieldConfig {
+    if (!schema || !("const" in schema)) return field;
+    return { ...field, type: "null", wrappers: [], defaultValue: schema.const };
+}
+
 /** Felder vom TypeSpec-Model File (x-file) bzw. File[] werden zu einem einzelnen Upload-Feld. */
 function toFileField(field: FormlyFieldConfig, schema: any): FormlyFieldConfig {
     const multiple = schema.type === "array" && !!schema.items?.["x-file"];
@@ -101,7 +132,7 @@ export class Form {
         const schema = this.schema();
         const model = prune(this.lastModel, schema, schema) ?? {};
         this.lastModel = model;
-        const root = new FormlyJsonschema().toFieldConfig(refsToAllOf(schema), {
+        const root = new FormlyJsonschema().toFieldConfig(refsToAllOf(titleUnionVariants(schema)), {
             map: (field, fieldSchema) => {
                 // Ohne @summary (-> "title") den Property-Namen als Label verwenden.
                 if (!field.props?.label && typeof field.key === "string") {
@@ -110,7 +141,7 @@ export class Form {
                 // x-widget (z. B. "textarea" am Scalar text) wählt einen registrierten Formly-Typ.
                 const widget = fieldSchema["x-widget"];
                 if (typeof widget === "string" && this.formlyConfig.types[widget]) field.type = widget;
-                return toFileField(field, fieldSchema);
+                return toConstField(toFileField(field, fieldSchema), fieldSchema);
             },
         });
         // Titel kommt als <h1>: @summary am Model, sonst der Model-Name aus $id ("Foo.json").
