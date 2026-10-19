@@ -1,8 +1,9 @@
-import { Component, computed, effect, ElementRef, inject, input, output, signal, viewChild } from "@angular/core";
+import { Component, computed, effect, ElementRef, inject, input, model, output, signal, viewChild } from "@angular/core";
 import { FormGroup, ReactiveFormsModule } from "@angular/forms";
 import { FormlyConfig, FormlyFieldConfig, FormlyForm } from "@ngx-formly/core";
 import { FormlyJsonschema } from '@ngx-formly/core/json-schema';
 import { collectFileRefs, FileStore } from './file-store';
+import { TablerIconComponent } from "@tabler/icons-angular";
 
 /** "firstName" / "first_name" / "first-name" -> "First Name" */
 function titleCase(key: string): string {
@@ -102,19 +103,35 @@ function toFileField(field: FormlyFieldConfig, schema: any): FormlyFieldConfig {
     return { ...rest, type: "file", props: { ...rest.props, multiple, accept: schema.accept } };
 }
 
+/** single: nur Formular, double: Formular + Daten, triple: zusätzlich der Quelltext. */
+export type View = "single" | "double" | "triple";
+
 @Component({
     selector: "mo-form",
-    imports: [FormlyForm, ReactiveFormsModule],
+    imports: [FormlyForm, ReactiveFormsModule, TablerIconComponent],
     providers: [FileStore],
     host: { class: "block h-full" },
     template: `
       <form #formEl [formGroup]="state().form" (ngSubmit)="onSubmit()" class="flex h-full min-h-0 flex-col gap-4 p-4">
-        <h1 class="text-2xl font-bold">{{ state().title }}</h1>
+        <div class="mx-auto max-w-4xl w-full flex justify-between">
+            <h1 class="text-2xl font-bold">{{ state().title }}</h1>
+            <div class="tabs tabs-sm tabs-box">
+                @for (v of views; track v.value) {
+                    <label class="tab" [title]="v.label">
+                        <input type="radio" name="view" [value]="v.value" [attr.aria-label]="v.label"
+                               [checked]="view() === v.value" (change)="view.set(v.value)">
+                        <tabler-icon [icon]="v.icon"></tabler-icon>
+                    </label>
+                }
+            </div>
+        </div>
         <div class="divider m-0"></div>
         <!-- Nur ab hier scrollen; data-print-expand: der PDF-Export klappt den Bereich für den Screenshot auf -->
-        <div data-print-expand class="-mx-4 min-h-0 flex-1 overflow-y-auto px-4">
+        <div data-print-expand class="mx-auto min-h-0 flex-1 overflow-y-auto px-4 max-w-4xl w-full">
             <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model" (modelChange)="valueChange.emit($event)"></formly-form>
-            <button type="submit" class="btn btn-primary btn-sm w-fit" [disabled]="exporting()">Submit</button>
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary w-fit" [disabled]="exporting()">Submit</button>
+            </div>
         </div>
     </form>
     `,
@@ -125,6 +142,13 @@ export class Form {
     schema = input.required<any>();
     /** Aktuelle Formulardaten, bei jeder Eingabe und nach jedem Schema-Wechsel. */
     valueChange = output<unknown>();
+    /** Welche Panes der Editor zeigt; die Auswahl sitzt hier im Formular-Kopf. */
+    view = model<View>("triple");
+    protected readonly views: { value: View; icon: string; label: string }[] = [
+        { value: "single", icon: "columns-1", label: "Nur Formular" },
+        { value: "double", icon: "columns-2", label: "Formular und Daten" },
+        { value: "triple", icon: "columns-3", label: "Quelltext, Formular und Daten" },
+    ];
     /** Letztes Model, damit Eingaben über Schema-Änderungen erhalten bleiben. */
     private lastModel: any = {};
     /** Bei jedem neuen Schema eine frische FormGroup, sonst bleiben alte Controls hängen. */

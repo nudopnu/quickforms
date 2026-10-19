@@ -1,9 +1,9 @@
 import { Component } from '@angular/core';
-import { Monaco } from './monaco';
+import { RouterOutlet } from '@angular/router';
 
 @Component({
-  imports: [Monaco],
+  imports: [RouterOutlet],
   selector: 'app-root',
-  template: `<mo-monaco></mo-monaco>`,
+  template: `<router-outlet />`,
 })
 export class App { }
