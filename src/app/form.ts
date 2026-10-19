@@ -144,7 +144,7 @@ export type View = "single" | "double" | "triple";
         <div class="divider m-0"></div>
         <!-- Nur ab hier scrollen; data-print-expand: der PDF-Export klappt den Bereich für den Screenshot auf -->
         <div data-print-expand class="mx-auto min-h-0 flex-1 overflow-y-auto px-4 max-w-4xl w-full">
-            <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model" (modelChange)="valueChange.emit($event)"></formly-form>
+            <formly-form [form]="state().form" [fields]="state().fields" [model]="state().model" (modelChange)="onModelChange()"></formly-form>
             <div class="flex justify-end">
                 <button type="submit" class="btn btn-primary w-fit" [disabled]="exporting()">Submit</button>
             </div>
@@ -196,6 +196,14 @@ export class Form {
             const { model } = this.state();
             setTimeout(() => this.valueChange.emit(model));
         });
+    }
+
+    /**
+     * Formly meldet modelChange teils mitten in einem Umbau (Variantenwechsel einer Union: erst [{}], dann [null]),
+     * die danach gesetzten Defaults aber nicht mehr. Daher erst nach dem Umbau den fertigen Stand melden.
+     */
+    protected onModelChange() {
+        setTimeout(() => this.valueChange.emit(this.state().model));
     }
 
     formEl = viewChild.required<ElementRef<HTMLFormElement>>('formEl');
