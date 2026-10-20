@@ -60,12 +60,20 @@ import { TypeSpec, type Problem } from "./typespec";
                 }
             </div>
         </div>
-        <mo-monaco class="relative h-full min-w-0 flex-1" [class.hidden]="view() === 'single'"
-            [value]="data()"
-            language="yaml"
-            path="test/data.yaml"
-            [options]="{ readOnly: true, minimap: { enabled: false } }"
-        />
+        <div class="flex h-full min-w-0 flex-1 flex-col" [class.hidden]="view() === 'single'">
+            <mo-monaco class="relative min-h-0 flex-1"
+                [value]="data()"
+                language="yaml"
+                path="test/data.yaml"
+                [options]="{ readOnly: true, minimap: { enabled: false } }"
+            />
+            <mo-monaco class="relative h-1/2 shrink-0 border-t border-base-300"
+                [value]="schemas()[current()] ?? ''"
+                language="json"
+                path="test/schema.json"
+                [options]="{ readOnly: true, minimap: { enabled: false } }"
+            />
+        </div>
     </div>
     `,
 })

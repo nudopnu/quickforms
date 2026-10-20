@@ -15,7 +15,7 @@ import { FileUpload, UploadFile } from './file-upload';
     imports: [FormlyValidationMessage],
     template: `
     <fieldset class="fieldset">
-      @if (props.label) { <legend class="fieldset-legend">{{ props.label }}</legend> }
+      @if (props.label) { <legend class="fieldset-legend">{{ props.label }}{{ props.required ? ' *' : '' }}</legend> }
       <ng-container #fieldComponent />
       @if (showError) {
         <p class="label text-error"><formly-validation-message [field]="field" /></p>
@@ -62,7 +62,7 @@ export class DaisyTextareaType extends FieldType<FieldTypeConfig> { }
     <label class="label cursor-pointer gap-3">
       <input type="checkbox" class="checkbox checkbox-primary"
              [formControl]="formControl" [formlyAttributes]="field" />
-      <span>{{ props.label }}</span>
+      <span>{{ props.label }}{{ props.required ? ' *' : '' }}</span>
     </label>`,
 })
 export class DaisyCheckboxType extends FieldType<FieldTypeConfig> { }
@@ -90,7 +90,7 @@ export class DaisySelectType extends FieldType<FieldTypeConfig> { }
   template: `
     @if (!variant || hasVisibleFields) {
       <fieldset class="fieldset" [class]="bordered ? 'border border-secondary/10 px-4 pt-4 pb-2 rounded-box' : ''">
-        @if (props.label && !variant) { <legend class="fieldset-legend">{{ props.label }}</legend> }
+        @if (props.label && !variant) { <legend class="fieldset-legend">{{ props.label }}{{ props.required ? ' *' : '' }}</legend> }
         @for (f of field.fieldGroup; track $index) { <formly-field [field]="f" /> }
         @if (showError && formControl.errors) {
           <p class="label text-error"><formly-validation-message [field]="field" /></p>
@@ -132,7 +132,7 @@ export class DaisyObjectType extends FieldType {
   imports: [FormlyField, TablerIconComponent],
   template: `
     <fieldset class="fieldset gap-4">
-      @if (props.label) { <legend class="fieldset-legend">{{ props.label }}</legend> }
+      @if (props.label) { <legend class="fieldset-legend">{{ props.label }}{{ props.required ? ' *' : '' }}</legend> }
       @for (f of field.fieldGroup; track f; let i = $index) {
         <div class="flex items-center gap-2">
           <formly-field class="flex-1" [field]="f" />
